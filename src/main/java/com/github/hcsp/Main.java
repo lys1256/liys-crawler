@@ -11,42 +11,95 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+
 
 public class Main {
-    public static void main(String[] args) throws IOException {
-        List<String> linkPool = new ArrayList<>();
-        linkPool.add("https://sina.cn");
-        Set<String> processedLinks = new HashSet<>();
+    public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
+
+        //从数据库加载即将处理的链接的代码
+        Class.forName("com.mysql.cj.jdbc.Driver");
+        Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/news?serverTimezone=UTC", "root", "P@ssword-123");
+
+        //从数据库加载已经处理的链接代码
+        new HashSet<>(loadUrlsFromDatabase(connection, "select link from links_already_processed"));
+
         while (true) {
+            List<String> linkPool = loadUrlsFromDatabase(connection, "select link from links_to_be_processed");
             if (linkPool.isEmpty()) {
                 break;
             }
             //提取连接
             String link = linkPool.remove(linkPool.size() - 1);
+            deleteFromDatabase(connection, link);
             //判断是否已经处理过连接
-            if (processedLinks.contains(link)) {
+            if (isProcessed(connection, link)) {
                 continue;
             }
-            //重勾为自解释的函数
-            //这是我们感兴趣的
             if (isInterestingLink(link)) {
                 Document document = httpGetAndParseHTML(link);
-                ArrayList<Element> links = document.select("a");
-                links.stream().map(aTag -> aTag.attr("href")).forEach(linkPool::add);
-//              for (Element aTag:links){
-//                  linkPool.add(aTag.attr("href"));
-//              }
-                //新闻详情处理
+                parseUrlsFromPageAndSotreIntoDatabase(connection, document);
                 storeIntoDatabaseIfItIsNews(document);
-                processedLinks.add(link);
+                addLinkIntoDatase(connection, link, "insert into links_already_processed values(?)");
             }
         }
 
 
+    }
+
+    private static void parseUrlsFromPageAndSotreIntoDatabase(Connection connection, Document document) {
+        for (Element aTag : document.select("a")) {
+            String href = aTag.attr("href");
+            addLinkIntoDatase(connection, href, "insert into links_to_be_processed values(?)");
+        }
+    }
+
+
+    private static Boolean isProcessed(Connection connection, String link) {
+        try (PreparedStatement statement = connection.prepareStatement("select Link FROM links_already_processed WHERE LINK = ?")) {
+            statement.setString(1, link);
+            ResultSet resultSet = statement.executeQuery();
+            return resultSet.next();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return true;
+    }
+
+    private static void addLinkIntoDatase(Connection connection, String link, String sql) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void deleteFromDatabase(Connection connection, String link) {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM links_to_be_processed WHERE LINK = ?")) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static List<String> loadUrlsFromDatabase(Connection connection, String sql) throws SQLException {
+        List<String> results = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            ResultSet resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                results.add(resultSet.getString(1));
+            }
+            return results;
+        }
     }
 
     private static void storeIntoDatabaseIfItIsNews(Document document) {
