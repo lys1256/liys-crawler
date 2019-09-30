@@ -61,6 +61,23 @@
     <build>
         <plugins>
             <plugin>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-maven-plugin</artifactId>
+            <version>6.0.4</version>
+            <configuration>
+                <url>jdbc:mysql://localhost:3306/news?serverTimezone=UTC</url>
+                <user>root</user>
+                <password>P@ssword-123</password>
+            </configuration>
+            <dependencies>
+                <dependency>
+                    <groupId>mysql</groupId>
+                    <artifactId>mysql-connector-java</artifactId>
+                    <version>8.0.17</version>
+                </dependency>
+            </dependencies>
+        </plugin>
+            <plugin>
                 <groupId>com.github.spotbugs</groupId>
                 <artifactId>spotbugs-maven-plugin</artifactId>
                 <version>3.1.12.2</version>

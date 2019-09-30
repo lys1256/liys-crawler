@@ -17,36 +17,25 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 public class Main {
     public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
-
         //从数据库加载即将处理的链接的代码
         Class.forName("com.mysql.cj.jdbc.Driver");
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/news?serverTimezone=UTC", "root", "P@ssword-123");
-
-        //从数据库加载已经处理的链接代码
-        new HashSet<>(loadUrlsFromDatabase(connection, "select link from links_already_processed"));
-
-        while (true) {
-            List<String> linkPool = loadUrlsFromDatabase(connection, "select link from links_to_be_processed");
-            if (linkPool.isEmpty()) {
-                break;
-            }
-            //提取连接
-            String link = linkPool.remove(linkPool.size() - 1);
-            deleteFromDatabase(connection, link);
+        String link=null;
+        while ((link=getNextLinkThenDel(connection))!=null) {
             //判断是否已经处理过连接
-            if (isProcessed(connection, link)) {
+            if (isProcessedLink(connection, link)) {
                 continue;
             }
             if (isInterestingLink(link)) {
                 Document document = httpGetAndParseHTML(link);
                 parseUrlsFromPageAndSotreIntoDatabase(connection, document);
-                storeIntoDatabaseIfItIsNews(document);
+                storeIntoDatabaseIfItIsNews(connection,document,link);
                 addLinkIntoDatase(connection, link, "insert into links_already_processed values(?)");
             }
         }
@@ -54,15 +43,31 @@ public class Main {
 
     }
 
+    private static String getNextLinkThenDel(Connection connection) throws SQLException {
+        List<String> resultSet=loadUrlsFromDatabase(connection, "select link from links_to_be_processed limit 1");
+        String nextlink=resultSet.get(0);
+        System.out.println(nextlink);
+        if (nextlink==null) {
+            return null;
+        }
+        deleteFromDatabase(connection,nextlink);
+        return nextlink;
+    }
+
     private static void parseUrlsFromPageAndSotreIntoDatabase(Connection connection, Document document) {
         for (Element aTag : document.select("a")) {
             String href = aTag.attr("href");
+            if (href.toLowerCase().startsWith("javascript")){
+                continue;
+            }
+                if (href.startsWith("//")) {
+                    href.replaceFirst("//", href = "https:" + href);
+                }
             addLinkIntoDatase(connection, href, "insert into links_to_be_processed values(?)");
         }
     }
 
-
-    private static Boolean isProcessed(Connection connection, String link) {
+    private static Boolean isProcessedLink(Connection connection, String link) {
         try (PreparedStatement statement = connection.prepareStatement("select Link FROM links_already_processed WHERE LINK = ?")) {
             statement.setString(1, link);
             ResultSet resultSet = statement.executeQuery();
@@ -102,11 +107,21 @@ public class Main {
         }
     }
 
-    private static void storeIntoDatabaseIfItIsNews(Document document) {
+    private static void storeIntoDatabaseIfItIsNews(Connection connection,Document document,String link) {
         ArrayList<Element> articleTags = document.select("article");
         if (!articleTags.isEmpty()) {
             for (Element articleTag : articleTags) {
+                String content=document.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
                 String title = articleTags.get(0).child(0).text();
+                try {
+                    PreparedStatement statement=connection.prepareStatement("insert into news (url,title,context,created_at,MODIFIED_AT)values (?,?,?,now(),now())");
+                    statement.setString(1,link);
+                    statement.setString(2,title);
+                    statement.setString(3,content);
+                    statement.executeUpdate();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
                 System.out.println(title);
             }
         }
@@ -114,9 +129,7 @@ public class Main {
 
     private static Document httpGetAndParseHTML(String link) throws IOException {
         CloseableHttpClient httpclient = HttpClients.createDefault();
-        if (link.startsWith("//")) {
-            link.replaceFirst("//", link = "https:" + link);
-        }
+
         System.out.println(link);
         HttpGet httpGet = new HttpGet(link);
         CloseableHttpResponse response1 = httpclient.execute(httpGet);
@@ -134,7 +147,7 @@ public class Main {
     }
 
     private static boolean isInterestingLink(String link) {
-        if ((!link.contains("news.sina.cn") && !"https://sina.cn".equals(link))) {
+        if (!link.contains("news.sina.cn") && !("https://sina.cn".equals(link))) {
             //这是我们不感兴趣的内容
         } else if (!link.contains("https://passport.sina.cn") && !link.contains("hotnews.sina")) {
             return true;

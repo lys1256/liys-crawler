@@ -1,0 +1,1 @@
+insert into links_to_be_processed(LINK) VALUES ('https://sina.cn')
