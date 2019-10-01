@@ -1,16 +1,17 @@
 package com.github.hcsp;
 
 import java.sql.SQLException;
-import java.util.List;
 
 public interface CrawlerDao {
-    List<String> loadUrlsFromDatabase(String sql) throws SQLException;
+    String loadUrlsFromDatabase() throws SQLException;
+
+    String getNextLinkThenDel();
 
     void storeNewsIntoDatabase(String link, String title, String content);
 
     void deleteFromDatabase(String link);
 
-    void addLinkIntoDatase(String link, String sql);
+    void addLinkIntoDatase(String link, String table);
 
     Boolean isProcessedLink(String link);
 }

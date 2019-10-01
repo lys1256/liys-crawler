@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.github.hcsp.CrawlerMapper">
+    <select id="selectNextAvailableLink" resultType="String">
+        select link
+        from links_to_be_processed
+        limit 1
+    </select>
+    <delete id="deletefromAvailableLink" parameterType="String">
+        delete
+        from links_to_be_processed
+        where link = #{link}
+    </delete>
+    <insert
+            id="addLinkIntoDatase"
+            parameterType="HashMap">
+        insert into
+        <choose>
+            <when test="tableName == links_to_be_processed">
+                links_to_be_processed
+            </when>
+            <otherwise>
+                links_already_processed
+            </otherwise>
+        </choose>
+        values (#{link})
+    </insert>
+    <select id="isProcessedLink" resultType="int" parameterType="String">
+        select count(link)
+        from links_already_processed
+        where link = #{link}
+    </select>
+    <insert id="storeNewsIntoDatabase" parameterType="com.github.hcsp.News">
+        insert into news (url, title, context, created_at, MODIFIED_AT)
+        values (#{url},#{title} ,#{context} , now(), now())
+    </insert>
+
+</mapper>

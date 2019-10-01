@@ -5,8 +5,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
 
 public class JdbcCrawlerDao implements CrawlerDao {
     private final Connection connection;
@@ -16,15 +14,20 @@ public class JdbcCrawlerDao implements CrawlerDao {
         this.connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/news?serverTimezone=UTC", "root", "P@ssword-123");
     }
 
-    public List<String> loadUrlsFromDatabase(String sql) throws SQLException {
-        List<String> results = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+    public String loadUrlsFromDatabase() throws SQLException {
+        String a=null;
+        try (PreparedStatement statement = connection.prepareStatement("select link from links_to_be_processed limit 1")) {
             ResultSet resultSet = statement.executeQuery();
             while (resultSet.next()) {
-                results.add(resultSet.getString(1));
-            }
-            return results;
+                a=resultSet.getString(1);
+            }return a;
+
         }
+    }
+
+    @Override
+    public String getNextLinkThenDel() {
+        return null;
     }
 
     public void storeNewsIntoDatabase(String link, String title, String content) {
